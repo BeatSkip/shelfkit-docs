@@ -1,0 +1,208 @@
+::: info
+Imported verbatim from [`ShelfKit-Vusion/Documentation/ota-update.md`](https://github.com/BeatSkip/ShelfKit-Vusion/blob/main/Documentation/ota-update.md) — links rewritten for this site.
+:::
+
+# Wireless firmware update (OTA)
+
+A tag receives a new application over the wireless link, stores it in its own SPI
+flash, resets, and the bootloader programs the application from that flash and
+starts it. The transfer lives entirely in the application; the bootloader only
+notices a magic sequence and copies — it has no radio code at all.
+
+```
+ host                         hub                          tag                    bootloader
+ ────                         ───                          ───                    ──────────
+ ota-send.py ── DATA frames ──► relay ──► POLL/DATA ──► write chunks to SPI flash
+ (BEGIN/CHUNK/END)                                      check CRC, write header
+                                                        with magic, reset ───────► magic? yes
+                                                                                   parse header
+                                                                                   verify CRC
+                                                                                   erase application
+                                                                                   program from flash
+                                                                                   clear magic
+                                                                                   jump into the app
+```
+
+Nothing about the hub changes: firmware frames are DATA frames like image chunks,
+so the existing reliable relay (one frame in flight, ACK per frame) carries them.
+
+## SPI flash layout — `ShelfKit-Firmware/Shared/firmware/shelfota/inc/shelfota.h`
+
+| SPI offset | Contents |
+|---|---|
+| `0x000000` | header, 16 bytes used: magic `SKFW`, format version, flags, image length (LE), image CRC-16 (LE), header CRC-16 (LE) |
+| `0x001000` | the tag's identity record - see [tag-identity.md](/wireless/identity); never erased by an update |
+| `0x002000` | the tag's **configuration record** (`OTA_RESERVED_ADDR`): the check-in interval, see tag-identity.md; an update never touches it |
+| `0x003000` | the image, byte 0 = internal flash address 0 |
+
+A tag that has never seen this firmware may still carry a *valid* header from
+something else, which would make the bootloader install that stale image at the next
+reset. The first boot therefore erases the header sector (along with the identity,
+the reserved sector and the whole image window) before it stores its own identity —
+see [tag-identity.md](/wireless/identity#what-happens-to-a-used-tags-flash).
+
+The bootloader checks sector 0 on **every reset**, before it does anything else
+(including the auto-run of the application). Three things it needs for that check
+to work, all of which were wrong at first:
+
+1. **Order.** The auto-run used to come first, so a normal reset jumped into the
+   old application and the update was only seen when the boot button (SW5/PB3) was
+   held. The OTA check now runs before the auto-run.
+2. **The flash rail** (PA5/U4) must be driven on, or the header reads back `0xFF`
+   and looks like "no update". The bootloader drives it on and clears `ANALOGA`
+   bit 5, since the vendor startup configures PA5 as an analog pin.
+3. **The hardware SPI must be off.** The application resets with `ljmp 0x0000`,
+   which does not reset peripherals, and it leaves the SPI master enabled
+   (`SPMODE = 0x01`); the bootloader's bit-banged read then fights the SPI
+   controller. `ota_spi_begin()` disables the SPI first.
+
+See [tag-identity.md](/wireless/identity#the-flashs-switched-rail) for the rail.
+
+The header lives in its own 4 KiB sector so erasing it never touches the image,
+and the magic is written **last**, after the CRC of everything received has
+matched. An interrupted transfer therefore leaves no magic and the bootloader
+boots the application that is still there.
+
+## Protocol — `shelfmsg.h`
+
+| Payload | Meaning |
+|---|---|
+| `[4, len_lo, len_hi, crc_lo, crc_hi]` | `SM_OP_FW_BEGIN`: the tag erases the header sector and every sector the image needs |
+| `[5, off_lo, off_hi, data…]` | `SM_OP_FW_CHUNK`: up to 28 bytes at that offset; accepted only when the offset is exactly what the tag already holds |
+| `[6]` | `SM_OP_FW_END`: verify length + CRC, write the committed header, reset |
+
+The CRC is CRC-16/CCITT (poly `0x1021`, init `0xFFFF`) over the image bytes, so
+the sender, the tag and the bootloader share one definition (`ota_crc16`).
+
+## Application side — `Vusion/src/fw_rx.c`
+
+- No buffers: each chunk goes straight to the flash and is folded into the CRC.
+- `BEGIN` erases up to ~0.3 s worth of sectors, so the sender waits before the
+  first chunk; a repeated chunk (lost ACK) is ignored because offsets are absolute.
+- `END` commits only when every byte arrived and the CRC matches, then jumps back
+  to the reset vector — which is the bootloader's own vector when it is installed.
+- A transfer that stalls for 10 s is abandoned (the radio has no such thing as a
+  half-open connection).
+
+## Bootloader side — `Bootloader/src/main.c`
+
+Deliberately plain: bit-banged SPI, one 32-byte buffer, no radio.
+
+1. Read the 16-byte header from SPI flash; parse magic, version, header CRC.
+2. Verify the image CRC **before erasing anything** — a corrupt image must never
+   cost the working firmware.
+3. Take the image's first three bytes (`02 hi lo`), put `hi`/`lo` into the
+   jump-vector slot at `0xD7FE` (low byte first, which is what `run_application()`
+   reads), and skip those three bytes when programming.
+4. `erase_app()`, then program the image 2 bytes at a time from address 2 upward
+   (addresses 0–2 are the bootloader's own reset vector and stay untouched; the
+   word at 2 carries a 0xFF that programs nothing).
+5. Erase the SPI header sector — that is what makes the update run once.
+6. Fall through to the normal path: `jmp_vector` is now valid, so the new
+   application starts.
+
+Serial flashing is unchanged, and it still works if the OTA image is broken.
+
+## Memory map after this change
+
+| Region | Range | Use |
+|---|---|---|
+| application | `0x0000–0xD7FD` | up to 55,038 B in flash; as an OTA image it must fit the `0x3000–0xD7FE` window, i.e. 43,006 B (currently 40,921 B) |
+| jump vector | `0xD7FE–0xD7FF` | the application entry, written when one is flashed |
+| bootloader | `0xD800–0xFBFF` | 9,216 B region, 8,819 B used, 397 B free |
+| reserved | `0xFC00–0xFFFF` | not in the bootloader's CRC range; nothing links into it |
+
+The bootloader moved from `0xE400` to `0xD800` for this feature: at `0xE400` it had
+109 bytes free, the OTA path needed ~2.3 KB (bit-bang SPI, the program loop, and
+SDCC's reentrant support for the shared CRC/header code).
+
+A tag that has no bootloader yet gets one with the merged HEX from
+`build-all.py` (`vusion-full-*.hex`), which contains both images and already has the
+application's entry in the jump-vector slot — see
+[ShelfKit-Firmware/Bootloader/README.md](/shelfkit/bootloader#installing-the-bootloader-and-the-application-at-once).
+
+### The reset after an update
+
+`cpu_reset()` writes `PCON |= 0x10` (SWRESET) instead of jumping to `0x0000`. A jump
+does not reset the peripherals: the bootloader inherited the application's SPI and
+oscillator state and hung on its first flash read, so the tag stored the image and
+then sat there until it was reset by hand. SWRESET restarts the core and peripherals
+exactly like a power-on.
+
+The commit header write is checked too: if programming it fails the tag logs
+`fw header FAILED` and keeps running the firmware it already has, rather than
+resetting into a boot that has nothing to apply.
+
+### The reset vector is part of the bootloader
+
+The bootloader only runs if `0x0000` holds `ljmp 0xD838`. That is what
+`Release/vusion-full-*.hex` writes, together with the application entry at
+`0xD7FE`. Flashing the application hex on its own puts `ljmp 0x021B` at `0x0000`,
+which starts the application directly: the OTA image is stored in SPI flash and
+never applied, because nothing ever looks at it. The build script's "Tag:" line
+always names the full image.
+
+### Indications
+
+The bootloader shows nothing on a normal boot (the LEDs are driven off before
+anything else, so a stray level from the application cannot leave one lit behind
+the panel). Only an update is indicated, all with 500 ms pulses:
+
+| LED | when |
+|---|---|
+| blue | a committed image was found and is being programmed |
+| green | programming finished, the new application is about to boot |
+| red | programming failed (`OTA ERR crc` / `entry` / `erase`), the old app still boots |
+
+### Which firmware is on the board
+
+Both boards print a capability marker at the end of their boot banner:
+`*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1` (`batch` accepts multi-frame lines, `show` draws on the hub's own panel). `dump=1` means the build can forward tag
+DATA payloads, which the flash read-back needs; a hub without it will relay the frames
+but drop their bytes, and the server says so rather than showing an empty dump.
+
+## Using it
+
+From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Update firmware** (it joins the **Queue** and starts when the tag next checks in).
+
+From a shell:
+
+```
+python ShelfKit-Firmware/Tooling/build-all.py                  # Release/vusion-<date>-<hash>.hex
+python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-…​.hex --addr 0100 -p COM4
+```
+
+`ota-send.py` converts the Intel HEX to the binary the tag wants (gap-filling with
+0xFF), prints the entry address and CRC, then sends BEGIN, ~1,460 chunks and END.
+A 40 KB image is ~1,460 chunks and takes a couple of minutes; the transfer waits for the tag's next poll first (up to 5 minutes when it is idle, less when pre-armed). The tag's log shows
+`fw begin len=… crc=…`, then `fw stored, resetting`, and after the reboot the
+bootloader prints `OTA image len=… crc=…` and `OTA ok, booting`.
+
+`--dry-run` parses and checksums without touching the radio — worth doing before
+every real transfer. It also refuses an image that would not fit the window
+(`0x3000–0xD7FE`, 43,006 bytes).
+
+### Headroom
+
+The image window is 43,006 bytes (`0x3000–0xD7FE`; the sender caps it at 43,000, `OTA_MAX_IMAGE`). The
+current application is **40,921 bytes**, so about **2 KB** is left. That is thin: ECO decoding,
+batched receive and the low-power work took the room that deleting the compiled-in boot logo
+(11 KB) had freed earlier. The next sizeable feature has to make room first.
+
+The bootloader region is 9,216 bytes and the bootloader takes 8,819 of them, leaving 397.
+
+## Status
+
+The whole path **runs on real tags**: the server's **Update firmware** button and `ota-send.py` have sent images,
+the tag verified and stored them, reset (`PCON.SWRESET`), and the bootloader programmed the
+application and started it, with the tag keeping its id. Tuning is still open: a transfer's duration
+depends on the radio settings and on how many polls a tag misses, and the numbers in this document
+(chunk counts, "about 2 minutes") are from the early runs, not a benchmark.
+
+## Known gaps
+
+- **No target identity in the image.** The sender only checks that the file starts
+  with a reset jump and fits; `ota-send.py` would happily accept a hub image for a
+  tag. A build-time marker byte in the header would fix that.
+- No resume (BEGIN always erases), no rollback to the previous image, no signature.
+- No progress feedback from the tag during the transfer beyond per-frame ACKs.

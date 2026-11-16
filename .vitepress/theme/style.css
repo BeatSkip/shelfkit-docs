@@ -1,0 +1,241 @@
+/* ShelfKit docs — e-ink BWR theme: paper white, ink black, one red accent. */
+
+:root {
+  --vp-c-brand-1: #c22f21;
+  --vp-c-brand-2: #a02618;
+  --vp-c-brand-3: #7e1d12;
+  --vp-c-brand-soft: rgba(194, 47, 33, 0.12);
+  --vp-c-bg: #f6f3ec;
+  --vp-c-bg-soft: #efebe1;
+  --vp-c-bg-mute: #e7e2d5;
+  --vp-c-text-1: #1b1a17;
+  --vp-c-text-2: #55524a;
+  --vp-c-text-3: #8a867a;
+  --vp-c-divider: #d8d2c2;
+  --vp-c-border: #cfc9b8;
+  --vp-c-tip-soft: var(--vp-c-brand-soft);
+  --vp-font-family-base: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+  --vp-font-family-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  --vp-nav-height: 60px;
+  --radius: 3px;
+}
+
+.dark {
+  --vp-c-brand-1: #e8543f;
+  --vp-c-brand-2: #d64530;
+  --vp-c-brand-3: #f0755f;
+  --vp-c-brand-soft: rgba(232, 84, 63, 0.16);
+  --vp-c-bg: #171512;
+  --vp-c-bg-soft: #1f1c18;
+  --vp-c-bg-mute: #282420;
+  --vp-c-text-1: #ece7db;
+  --vp-c-text-2: #b5af9f;
+  --vp-c-text-3: #857f70;
+  --vp-c-divider: #33302a;
+  --vp-c-border: #3d392f;
+}
+
+/* E-ink panel look: sharp corners, hairline borders, paper background. */
+.VPContent,
+.VPNav,
+.VPSidebar,
+.VPDoc {
+  background: var(--vp-c-bg);
+}
+
+.VPNavBar {
+  border-bottom: 1px solid var(--vp-c-border) !important;
+  backdrop-filter: none;
+}
+
+.VPButton.brand,
+.VPButton.alt.brand:hover {
+  border-radius: var(--radius);
+}
+
+.VPButton.alt {
+  border-radius: var(--radius);
+  border-color: var(--vp-c-border);
+}
+
+/* Hero */
+.VPHero .name {
+  letter-spacing: -0.02em;
+}
+.VPHero .text {
+  color: var(--vp-c-brand-1) !important;
+  font-weight: 700;
+}
+.VPHero .tagline {
+  color: var(--vp-c-text-2);
+}
+
+/* Feature cards as "tags" on a shelf */
+.VPFeature {
+  border: 1px solid var(--vp-c-border) !important;
+  border-radius: var(--radius) !important;
+  background: var(--vp-c-bg-soft);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1) !important;
+  transform: translateY(-2px);
+}
+.VPFeature .title {
+  color: var(--vp-c-text-1);
+}
+.VPFeature .details {
+  color: var(--vp-c-text-2);
+}
+.VPFeature .icon {
+  background: var(--vp-c-brand-soft) !important;
+  color: var(--vp-c-brand-1) !important;
+  border-radius: var(--radius) !important;
+}
+
+/* Images framed like an e-ink panel */
+.VPDoc img {
+  border: 1px solid var(--vp-c-border);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 4px;
+}
+.dark .VPDoc img {
+  background: #000;
+}
+
+/* Headings get a small red tick, like the red plane of a BWR panel */
+.VPDoc h2::before,
+.VPDoc h3::before {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.45em;
+  background: var(--vp-c-brand-1);
+  border-radius: 1px;
+  vertical-align: baseline;
+}
+
+/* Tables: ledger style */
+.VPDoc table {
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+.VPDoc th {
+  background: var(--vp-c-bg-soft);
+  border-bottom: 2px solid var(--vp-c-text-1);
+}
+.VPDoc th,
+.VPDoc td {
+  border: 1px solid var(--vp-c-divider);
+  padding: 6px 12px;
+}
+
+/* Code blocks: sharp, dark like a console */
+.VPDoc div[class*='language-'] {
+  border-radius: var(--radius) !important;
+  border: 1px solid var(--vp-c-border);
+}
+
+/* Inline code as a price-tag chip */
+.VPDoc :not(pre) > code {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-2);
+  border-radius: var(--radius);
+  padding: 0.15em 0.4em;
+  font-size: 0.88em;
+}
+.dark .VPDoc :not(pre) > code {
+  color: var(--vp-c-brand-3);
+}
+
+/* Callouts */
+.VPDoc .custom-block {
+  border-radius: var(--radius);
+}
+
+/* Sidebar active item: red left bar */
+.VPSidebarItem.is-active > .link,
+.VPSidebarItem.is-active > .link > .text {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+.VPSidebar .group > .items .VPSidebarItem.is-active > .link {
+  border-left: 2px solid var(--vp-c-brand-1);
+}
+
+/* Landing timeline */
+.timeline {
+  list-style: none;
+  margin: 1.5rem 0;
+  padding: 0;
+  border-left: 2px solid var(--vp-c-border);
+}
+.timeline li {
+  position: relative;
+  padding: 0.4rem 0 0.4rem 1.4rem;
+}
+.timeline li::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 0.85em;
+  width: 10px;
+  height: 10px;
+  background: var(--vp-c-brand-1);
+  border-radius: 1px;
+}
+.timeline .when {
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.8em;
+  color: var(--vp-c-text-3);
+}
+
+/* Repo cards */
+.repo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 1rem 0;
+}
+.repo-card {
+  border: 1px solid var(--vp-c-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--vp-c-bg-soft);
+}
+.repo-card:hover {
+  border-color: var(--vp-c-brand-1);
+}
+.repo-card .repo-name {
+  font-family: var(--vp-font-family-mono);
+  font-weight: 700;
+}
+.repo-card .repo-desc {
+  color: var(--vp-c-text-2);
+  font-size: 0.9em;
+  margin-top: 4px;
+}
+
+/* E-ink "panel" figure with caption */
+figure.panel {
+  margin: 1.2rem 0;
+  border: 1px solid var(--vp-c-border);
+  border-radius: var(--radius);
+  padding: 8px;
+  background: var(--vp-c-bg-soft);
+}
+figure.panel img {
+  border: none !important;
+  padding: 0 !important;
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+}
+figure.panel figcaption {
+  font-size: 0.82em;
+  color: var(--vp-c-text-3);
+  text-align: center;
+  padding-top: 6px;
+}

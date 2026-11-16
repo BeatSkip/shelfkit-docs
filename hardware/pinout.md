@@ -1,0 +1,28 @@
+::: info
+Imported verbatim from [`ShelfKit-Vusion/Documentation/signal-list.md`](https://github.com/BeatSkip/ShelfKit-Vusion/blob/main/Documentation/signal-list.md) — links rewritten for this site.
+:::
+
+### Port A 
+- PA:0 - [E-Ink] D/C
+- PA:1 - [SPI] CS (E-Ink)
+- PA:2 - Transistor U5 (active high, no pull, a load on the supply; parked low) - see pa2-pa5-findings.md
+- PA:3 - Crystal Oscillator P
+- PA:4 - Crystal Oscillator N
+- PA:5 - Transistor U4 (e-paper panel supply, active low, externally pulled up) - see pa2-pa5-findings.md
+
+### Port B
+- PB:0 - [LED] White LED
+- PB:1 - [SPI] CS (NFC)
+- PB:2 - [E-Ink] Busy 
+- PB:3 - [BOOT] Bootloader & [NFC] Field Detection
+- PB:4 - [UART] TX
+- PB:5 - [UART] RX & [E-Ink] Reset
+- PB:6 - [LED] Green channel
+- PB:7 - [LED] Blue channel
+
+### Port C
+- PC:0 - [SPI] CS (FLASH)
+- PC:1 - [SPI] SCLK
+- PC:2 - [SPI] MOSI
+- PC:3 - [SPI] MISO
+- PC:4 - [LED] Red channel
