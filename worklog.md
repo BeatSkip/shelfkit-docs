@@ -115,7 +115,29 @@ To re-import docs after upstream repo changes: re-clone the repos into `%TEMP%/s
 (read-only), re-run `%TEMP%/copy_assets.py`, `%TEMP%/optimize_assets.py` and `%TEMP%/import_docs.py`
 (scripts kept in the session temp dir), then `npm run build`.
 
-## 5. Assumptions & notes
+## 5. GitHub Pages deployment (2026-11-17)
+
+- Repo `BeatSkip/shelfkit-docs` (public, was empty, default branch `main`) was used as-is.
+- `.vitepress/config.mts` sets `base: '/shelfkit-docs/'` for production builds
+  (`PAGES_BASE` env or `NODE_ENV=production`), so local `npm run dev` stays at `/` while the
+  Pages build links under `/shelfkit-docs/`. Verified in local `dist/`: asset and page URLs
+  carry the prefix.
+- `.github/workflows/deploy.yml` mirrors the existing `ESL-Modding` deploy workflow pattern:
+  on push to `main` (or manual dispatch) it runs `npm ci` → `npm run build` (Node 22) →
+  `actions/upload-pages-artifact@v3` (`.vitepress/dist`) → `actions/deploy-pages@v4` into the
+  `github-pages` environment with `pages: write` + `id-token: write`.
+- Pages enabled via API: `POST /repos/BeatSkip/shelfkit-docs/pages {"build_type":"workflow"}` →
+  site URL **https://beatskip.github.io/shelfkit-docs/**.
+- First push of `main` triggered workflow run 43915979322 → **completed: success**.
+  Verified live with HTTP 200 on `/`, `/journey/`, `/shelfkit/`, `/repos`, `/about`,
+  leaf pages without trailing slash (`/journey/02-cracking-open`, `/hardware/pinout`,
+  `/reference/uu340-readme`, …), an image, and `/sitemap.xml`. Note: GitHub Pages serves
+  `foo.html` at `/foo`, but a trailing slash on a leaf (`/repos/`) 404s — that is normal
+  Pages behaviour with `cleanUrls`.
+- Subsequent edits: change files in this directory, `git commit`, `git push` — the workflow
+  rebuilds and redeploys automatically (~1–2 min).
+
+## 6. Assumptions & notes
 
 - "One nice static web page" was implemented as one static *site* with a single landing page plus
   chapters (user explicitly approved subpages/chapters over a single scroll).
